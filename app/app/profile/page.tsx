@@ -7,15 +7,28 @@ import { Input } from '@/components/ui/input'
 import { Header } from '@/components/chat/header'
 import Image from 'next/image'
 
+interface Profile {
+  id: string
+  email: string
+  full_name: string
+  avatar_url: string | null
+  bio: string | null
+  phone: string | null
+  location: string | null
+  website: string | null
+}
+
 export default function ProfilePage() {
   const [user, setUser] = useState<any>(null)
-  const [profile, setProfile] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [formData, setFormData] = useState({
-    firstName: '',
-    lastName: '',
+    full_name: '',
     bio: '',
+    phone: '',
+    location: '',
+    website: '',
+    avatar_url: '',
   })
 
   useEffect(() => {
@@ -25,7 +38,10 @@ export default function ProfilePage() {
         data: { user },
       } = await supabase.auth.getUser()
 
-      if (!user) return
+      if (!user) {
+        setLoading(false)
+        return
+      }
 
       setUser(user)
 
@@ -36,12 +52,13 @@ export default function ProfilePage() {
         .single()
 
       if (data) {
-        setProfile(data)
-        const nameParts = (data.full_name || '').split(' ')
         setFormData({
-          firstName: nameParts[0] || data.display_name || '',
-          lastName: nameParts.slice(1).join(' ') || '',
+          full_name: data.full_name || '',
           bio: data.bio || '',
+          phone: data.phone || '',
+          location: data.location || '',
+          website: data.website || '',
+          avatar_url: data.avatar_url || '',
         })
       }
 
@@ -58,19 +75,22 @@ export default function ProfilePage() {
     setSaving(true)
     try {
       const supabase = createClient()
-      await supabase.from('profiles').update({
-        full_name: `${formData.firstName} ${formData.lastName}`.trim(),
-        display_name: formData.firstName,
-        bio: formData.bio,
-        updated_at: new Date().toISOString(),
-      }).eq('id', user.id)
+      
+      const { error } = await supabase
+        .from('profiles')
+        .upsert({
+          id: user.id,
+          email: user.email,
+          full_name: formData.full_name,
+          bio: formData.bio,
+          phone: formData.phone,
+          location: formData.location,
+          website: formData.website,
+          avatar_url: formData.avatar_url,
+          updated_at: new Date().toISOString(),
+        })
 
-      setProfile({
-        ...profile,
-        first_name: formData.firstName,
-        last_name: formData.lastName,
-        bio: formData.bio,
-      })
+      if (error) throw error
     } catch (error) {
       console.error('Error updating profile:', error)
     } finally {
@@ -83,10 +103,17 @@ export default function ProfilePage() {
       <div className="min-h-screen flex flex-col">
         <Header />
         <div className="flex-1 flex items-center justify-center">
-          Yükleniyor...
+          Yukleniyor...
         </div>
       </div>
     )
+  }
+
+  const getInitials = () => {
+    if (formData.full_name) {
+      return formData.full_name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
+    }
+    return user?.email?.[0]?.toUpperCase() || 'U'
   }
 
   return (
@@ -100,12 +127,12 @@ export default function ProfilePage() {
             {/* Avatar */}
             <div className="mb-8">
               <h2 className="text-lg font-semibold text-foreground mb-4">
-                Profil Fotoğrafı
+                Profil Fotografi
               </h2>
               <div className="flex items-center gap-4">
-                {profile?.avatar_url ? (
+                {formData.avatar_url ? (
                   <Image
-                    src={profile.avatar_url}
+                    src={formData.avatar_url}
                     alt="Avatar"
                     width={96}
                     height={96}
@@ -114,43 +141,41 @@ export default function ProfilePage() {
                 ) : (
                   <div className="w-24 h-24 rounded-full bg-muted flex items-center justify-center">
                     <span className="text-2xl font-semibold text-muted-foreground">
-                      {formData.firstName?.[0] || 'U'}
+                      {getInitials()}
                     </span>
                   </div>
                 )}
-                <Button variant="outline">Fotoğraf Yükle</Button>
+                <div className="flex-1">
+                  <Input
+                    type="text"
+                    value={formData.avatar_url}
+                    onChange={(e) =>
+                      setFormData({ ...formData, avatar_url: e.target.value })
+                    }
+                    placeholder="Avatar URL'si"
+                    className="mb-2"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Profil fotografi icin bir URL girin
+                  </p>
+                </div>
               </div>
             </div>
 
             {/* Profile Form */}
             <form onSubmit={handleSave} className="space-y-6">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-foreground mb-2">
-                    Ad
-                  </label>
-                  <Input
-                    type="text"
-                    value={formData.firstName}
-                    onChange={(e) =>
-                      setFormData({ ...formData, firstName: e.target.value })
-                    }
-                    placeholder="Adınız"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-foreground mb-2">
-                    Soyad
-                  </label>
-                  <Input
-                    type="text"
-                    value={formData.lastName}
-                    onChange={(e) =>
-                      setFormData({ ...formData, lastName: e.target.value })
-                    }
-                    placeholder="Soyadınız"
-                  />
-                </div>
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-2">
+                  Ad Soyad
+                </label>
+                <Input
+                  type="text"
+                  value={formData.full_name}
+                  onChange={(e) =>
+                    setFormData({ ...formData, full_name: e.target.value })
+                  }
+                  placeholder="Adiniz Soyadiniz"
+                />
               </div>
 
               <div>
@@ -167,6 +192,48 @@ export default function ProfilePage() {
 
               <div>
                 <label className="block text-sm font-medium text-foreground mb-2">
+                  Telefon
+                </label>
+                <Input
+                  type="tel"
+                  value={formData.phone}
+                  onChange={(e) =>
+                    setFormData({ ...formData, phone: e.target.value })
+                  }
+                  placeholder="+90 555 123 4567"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-2">
+                  Konum
+                </label>
+                <Input
+                  type="text"
+                  value={formData.location}
+                  onChange={(e) =>
+                    setFormData({ ...formData, location: e.target.value })
+                  }
+                  placeholder="Istanbul, Turkiye"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-2">
+                  Web Sitesi
+                </label>
+                <Input
+                  type="url"
+                  value={formData.website}
+                  onChange={(e) =>
+                    setFormData({ ...formData, website: e.target.value })
+                  }
+                  placeholder="https://example.com"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-2">
                   Biyografi
                 </label>
                 <textarea
@@ -174,14 +241,14 @@ export default function ProfilePage() {
                   onChange={(e) =>
                     setFormData({ ...formData, bio: e.target.value })
                   }
-                  placeholder="Kendinizi tanıtın..."
+                  placeholder="Kendinizi tanitin..."
                   className="w-full px-4 py-2 rounded-md border border-input bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                   rows={4}
                 />
               </div>
 
               <Button type="submit" disabled={saving}>
-                {saving ? 'Kaydediliyor...' : 'Değişiklikleri Kaydet'}
+                {saving ? 'Kaydediliyor...' : 'Degisiklikleri Kaydet'}
               </Button>
             </form>
           </div>
